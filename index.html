@@ -2,22 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Fruit Match Memory</title>
   <style>
     :root{
       --bg:#0b1220; --text:#eaf2ff; --muted:rgba(234,242,255,.7);
       --accent:#7cdbff; --good:#6dffb3; --bad:#ff6d6d; --shadow:0 12px 35px rgba(0,0,0,.35);
     }
+    *{ box-sizing:border-box; }
     body{
       margin:0;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
       color:var(--text);
       background:radial-gradient(1000px 700px at 20% 10%, #15204a 0%, var(--bg) 55%, #070b15 100%);
       min-height:100vh;
+      min-height:100dvh;
       display:flex;
       justify-content:center;
+      overflow-x:hidden;
     }
+    
+    /* Default (portrait) layout */
     .wrap{ width:min(980px,96vw); padding:18px 10px 26px; display:grid; gap:14px; }
     header{ display:grid; gap:10px; justify-items:center; text-align:center; }
     h1{ font-size:clamp(20px,3.6vw,34px); margin:6px 0 0; }
@@ -155,14 +162,282 @@
       position:absolute; inset:0; z-index:2; pointer-events:none;
     }
 
+    /* ========== POPUP MENU SYSTEM ========== */
+    .menuBtn{
+      display:none;
+      position:fixed;
+      z-index:100;
+      width:48px; height:48px;
+      border-radius:50%;
+      background:linear-gradient(180deg, rgba(124,219,255,.25), rgba(124,219,255,.12));
+      border:1px solid rgba(124,219,255,.35);
+      color:var(--text);
+      font-size:22px;
+      cursor:pointer;
+      box-shadow:0 8px 24px rgba(0,0,0,.35);
+      transition:transform 0.2s ease, background 0.2s ease;
+    }
+    .menuBtn:hover{ transform:scale(1.05); }
+    .menuBtn:active{ transform:scale(0.95); }
+    
+    #settingsBtn{ top:12px; right:12px; }
+    #statsBtn{ top:12px; left:12px; }
+    
+    .popup{
+      display:none;
+      position:fixed;
+      z-index:200;
+      background:rgba(10,16,34,.96);
+      border:1px solid rgba(124,219,255,.25);
+      border-radius:20px;
+      padding:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,.5);
+      max-width:90vw;
+      max-height:80vh;
+      overflow-y:auto;
+      animation:popupIn 0.25s ease;
+    }
+    @keyframes popupIn{
+      from{ opacity:0; transform:scale(0.9) translateY(-10px); }
+      to{ opacity:1; transform:scale(1) translateY(0); }
+    }
+    .popup.active{ display:block; }
+    
+    .popupHeader{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:16px;
+      padding-bottom:12px;
+      border-bottom:1px solid rgba(255,255,255,.1);
+    }
+    .popupTitle{ font-size:18px; font-weight:800; margin:0; }
+    .closeBtn{
+      width:36px; height:36px;
+      border-radius:50%;
+      background:rgba(255,255,255,.1);
+      border:1px solid rgba(255,255,255,.15);
+      color:var(--text);
+      font-size:18px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .closeBtn:hover{ background:rgba(255,255,255,.15); }
+    
+    .popupContent{ display:grid; gap:12px; }
+    .popupContent .toggle{ width:100%; justify-content:flex-start; }
+    .popupContent button{ width:100%; }
+    
+    .popupOverlay{
+      display:none;
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.5);
+      z-index:150;
+    }
+    .popupOverlay.active{ display:block; }
+    
+    /* Stats popup specific */
+    #statsPopup .stats{
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+    }
+    #statsPopup .pill{ padding:8px 10px; }
+    
+    /* Landscape header bar */
+    .landscapeHeader{
+      display:none;
+      position:fixed;
+      top:0; left:0; right:0;
+      height:56px;
+      background:rgba(10,16,34,.92);
+      border-bottom:1px solid rgba(124,219,255,.18);
+      z-index:90;
+      padding:0 70px;
+      align-items:center;
+      justify-content:center;
+      gap:16px;
+    }
+    .landscapeHeader h1{
+      font-size:20px;
+      margin:0;
+      white-space:nowrap;
+    }
+    .landscapeHeader .message{
+      font-size:14px;
+      min-height:auto;
+      flex:1;
+      text-align:center;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    
+    /* Compact inline stats for landscape header */
+    .inlineStats{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+    .inlineStat{
+      display:flex;
+      align-items:center;
+      gap:4px;
+      font-size:13px;
+      color:var(--muted);
+    }
+    .inlineStat .val{
+      font-weight:800;
+      color:var(--text);
+    }
+
     @media (max-width: 520px){
       .stats{ grid-template-columns:repeat(2,minmax(0,1fr)); }
       .board{ gap:8px; padding:12px; }
       .board.bigMode{ gap:10px; padding:14px; }
     }
+    
+    /* ========== iPad Landscape Mode ========== */
+    @media (min-width: 700px) and (max-height: 600px) and (orientation: landscape),
+           (min-width: 900px) and (max-height: 800px) and (orientation: landscape) {
+      body{
+        align-items:flex-start;
+      }
+      
+      .wrap{
+        width:100%;
+        max-width:100%;
+        padding:66px 16px 16px;
+        gap:10px;
+        min-height:100vh;
+        min-height:100dvh;
+      }
+      
+      /* Hide default header & panel in landscape */
+      header{ display:none; }
+      .panel{ display:none; }
+      
+      /* Show landscape header & menu buttons */
+      .landscapeHeader{ display:flex; }
+      .menuBtn{ display:flex; align-items:center; justify-content:center; }
+      
+      /* Board takes full available space */
+      .boardWrap{
+        flex:1;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:0;
+        width:100%;
+        height:calc(100dvh - 72px);
+      }
+      
+      .board{
+        width:auto;
+        height:min(calc(100dvh - 90px), 90vw);
+        aspect-ratio:1/1;
+        max-width:calc(100dvh - 90px);
+        padding:12px;
+        gap:8px;
+      }
+      .board.bigMode{
+        height:min(calc(100dvh - 90px), 85vw);
+        max-width:calc(100dvh - 90px);
+        padding:14px;
+        gap:10px;
+      }
+      
+      .emoji{ font-size:clamp(20px,4vh,42px); }
+      
+      /* Popup positioning for landscape */
+      #settingsPopup{
+        top:70px;
+        right:12px;
+        width:280px;
+      }
+      #statsPopup{
+        top:70px;
+        left:12px;
+        width:260px;
+      }
+    }
+    
+    /* Extra wide landscape (iPad Pro, etc) */
+    @media (min-width: 1000px) and (max-height: 850px) and (orientation: landscape) {
+      .board{
+        height:min(calc(100dvh - 80px), 70vw);
+        max-width:min(calc(100dvh - 80px), 70vw);
+        gap:10px;
+        padding:14px;
+      }
+      .board.bigMode{
+        height:min(calc(100dvh - 80px), 65vw);
+        max-width:min(calc(100dvh - 80px), 65vw);
+      }
+      .emoji{ font-size:clamp(24px,5vh,48px); }
+    }
   </style>
 </head>
 <body>
+  <!-- Landscape Header Bar -->
+  <div class="landscapeHeader">
+    <h1>🍓 Fruit Match</h1>
+    <div class="inlineStats">
+      <div class="inlineStat"><span class="val" id="gridValueL">4×4</span></div>
+      <div class="inlineStat">⏱<span class="val" id="timeValueL">0:00</span></div>
+      <div class="inlineStat">👆<span class="val" id="movesValueL">0</span></div>
+      <div class="inlineStat">✓<span class="val" id="matchesValueL">0/0</span></div>
+      <div class="inlineStat">🏆<span class="val" id="winsValueL">0</span></div>
+    </div>
+    <div class="message" id="messageL"></div>
+  </div>
+  
+  <!-- Menu Buttons (visible in landscape) -->
+  <button class="menuBtn" id="statsBtn" title="Stats">📊</button>
+  <button class="menuBtn" id="settingsBtn" title="Settings">⚙️</button>
+  
+  <!-- Popup Overlay -->
+  <div class="popupOverlay" id="popupOverlay"></div>
+  
+  <!-- Stats Popup -->
+  <div class="popup" id="statsPopup">
+    <div class="popupHeader">
+      <h2 class="popupTitle">📊 Stats</h2>
+      <button class="closeBtn" data-close="statsPopup">✕</button>
+    </div>
+    <div class="popupContent">
+      <div class="stats">
+        <div class="pill"><div class="label">Grid</div><div class="value" id="gridValueP">4×4</div></div>
+        <div class="pill"><div class="label">Time</div><div class="value" id="timeValueP">0:00</div></div>
+        <div class="pill"><div class="label">Moves</div><div class="value" id="movesValueP">0</div></div>
+        <div class="pill"><div class="label">Matches</div><div class="value smallValue" id="matchesValueP">0/0</div></div>
+        <div class="pill"><div class="label">Wins</div><div class="value" id="winsValueP">0</div></div>
+      </div>
+      <div class="small" style="margin-top:8px;">
+        Level up every <b>3 wins</b>: 4×4 → 6×6 → 8×8 → 10×10
+      </div>
+    </div>
+  </div>
+  
+  <!-- Settings Popup -->
+  <div class="popup" id="settingsPopup">
+    <div class="popupHeader">
+      <h2 class="popupTitle">⚙️ Settings</h2>
+      <button class="closeBtn" data-close="settingsPopup">✕</button>
+    </div>
+    <div class="popupContent">
+      <button id="newGameBtnP">🎮 New Game</button>
+      <button id="peekBtnP" title="Peek at all cards">👀 Peek</button>
+      <button id="resetBtnP">🔄 Reset Progress</button>
+      <label class="toggle"><input id="soundToggleP" type="checkbox" checked />🔊 Sound</label>
+      <label class="toggle"><input id="easyToggleP" type="checkbox" />😊 Easy mode</label>
+      <label class="toggle"><input id="voiceToggleP" type="checkbox" />🗣️ Kid voice</label>
+      <label class="toggle"><input id="bigToggleP" type="checkbox" />👆 Big card mode</label>
+    </div>
+  </div>
+
   <div class="wrap">
     <header>
       <h1>🍓 Fruit Match Memory</h1>
@@ -230,7 +505,7 @@
   let elapsedMs = 0;
   let timerRunning = false;
 
-  // DOM
+  // DOM - Main panel
   const board = document.getElementById("board");
   const boardWrap = document.getElementById("boardWrap");
 
@@ -249,6 +524,37 @@
   const easyToggle  = document.getElementById("easyToggle");
   const voiceToggle = document.getElementById("voiceToggle");
   const bigToggle   = document.getElementById("bigToggle");
+  
+  // DOM - Landscape header
+  const gridValueL = document.getElementById("gridValueL");
+  const timeValueL = document.getElementById("timeValueL");
+  const movesValueL = document.getElementById("movesValueL");
+  const matchesValueL = document.getElementById("matchesValueL");
+  const winsValueL = document.getElementById("winsValueL");
+  const messageL = document.getElementById("messageL");
+  
+  // DOM - Popups
+  const statsBtn = document.getElementById("statsBtn");
+  const settingsBtn = document.getElementById("settingsBtn");
+  const popupOverlay = document.getElementById("popupOverlay");
+  const statsPopup = document.getElementById("statsPopup");
+  const settingsPopup = document.getElementById("settingsPopup");
+  
+  // DOM - Popup stats
+  const gridValueP = document.getElementById("gridValueP");
+  const timeValueP = document.getElementById("timeValueP");
+  const movesValueP = document.getElementById("movesValueP");
+  const matchesValueP = document.getElementById("matchesValueP");
+  const winsValueP = document.getElementById("winsValueP");
+  
+  // DOM - Popup controls
+  const newGameBtnP = document.getElementById("newGameBtnP");
+  const resetBtnP = document.getElementById("resetBtnP");
+  const peekBtnP = document.getElementById("peekBtnP");
+  const soundToggleP = document.getElementById("soundToggleP");
+  const easyToggleP = document.getElementById("easyToggleP");
+  const voiceToggleP = document.getElementById("voiceToggleP");
+  const bigToggleP = document.getElementById("bigToggleP");
 
   // Confetti
   const confettiCanvas = document.getElementById("confetti");
@@ -329,18 +635,43 @@
     return `${m}:${String(s).padStart(2,"0")}`;
   }
   function setMessage(text, tone=""){
-    message.textContent = text;
-    message.style.color =
+    const color =
       tone==="good" ? "rgba(109,255,179,.95)" :
       tone==="bad"  ? "rgba(255,109,109,.95)" :
                       "rgba(234,242,255,0.7)";
+    message.textContent = text;
+    message.style.color = color;
+    // Also update landscape message
+    if(messageL){
+      messageL.textContent = text;
+      messageL.style.color = color;
+    }
   }
   function updateStats(){
-    gridValue.textContent = `${gridSize}×${gridSize}`;
+    const gridText = `${gridSize}×${gridSize}`;
+    const timeText = formatTime(elapsedMs);
+    const matchText = `${matches}/${totalPairs}`;
+    
+    // Main panel
+    gridValue.textContent = gridText;
     movesValue.textContent = moves;
-    matchesValue.textContent = `${matches}/${totalPairs}`;
+    matchesValue.textContent = matchText;
     winsValue.textContent = wins;
-    timeValue.textContent = formatTime(elapsedMs);
+    timeValue.textContent = timeText;
+    
+    // Landscape header
+    if(gridValueL) gridValueL.textContent = gridText;
+    if(timeValueL) timeValueL.textContent = timeText;
+    if(movesValueL) movesValueL.textContent = moves;
+    if(matchesValueL) matchesValueL.textContent = matchText;
+    if(winsValueL) winsValueL.textContent = wins;
+    
+    // Popup stats
+    if(gridValueP) gridValueP.textContent = gridText;
+    if(timeValueP) timeValueP.textContent = timeText;
+    if(movesValueP) movesValueP.textContent = moves;
+    if(matchesValueP) matchesValueP.textContent = matchText;
+    if(winsValueP) winsValueP.textContent = wins;
   }
 
   function gridFromWins(w){
@@ -388,7 +719,10 @@
     startMs = performance.now() - elapsedMs;
     timerId = setInterval(() => {
       elapsedMs = performance.now() - startMs;
-      timeValue.textContent = formatTime(elapsedMs);
+      const timeText = formatTime(elapsedMs);
+      timeValue.textContent = timeText;
+      if(timeValueL) timeValueL.textContent = timeText;
+      if(timeValueP) timeValueP.textContent = timeText;
     }, 200);
   }
   function resetTimer(){
@@ -713,15 +1047,81 @@
     confettiRAF = requestAnimationFrame(tick);
   }
 
-  // Buttons + toggles
+  // Buttons + toggles (main panel)
   newGameBtn.addEventListener("click", () => newGame());
   resetBtn.addEventListener("click", () => resetProgress());
   peekBtn.addEventListener("click", () => peek(easyToggle.checked ? 1400 : 900));
 
-  // When toggles change, restart to apply cleanly
-  easyToggle.addEventListener("change", () => { setMessage(easyToggle.checked ? "Easy mode on! 👍" : "Easy mode off!", ""); speak(easyToggle.checked ? "Easy mode on!" : "Easy mode off!"); newGame(); });
-  bigToggle.addEventListener("change",  () => { setMessage(bigToggle.checked ? "Big card mode on! 👆" : "Big card mode off!", ""); speak(bigToggle.checked ? "Big card mode on!" : "Big card mode off!"); newGame(); });
-  voiceToggle.addEventListener("change", () => { setMessage(voiceToggle.checked ? "Kid voice on! 🗣️" : "Kid voice off!", ""); if (voiceToggle.checked) speak("Hello! Let's play!"); else if ("speechSynthesis" in window) window.speechSynthesis.cancel(); });
+  // Sync function for toggles
+  function syncToggle(main, popup, onChange){
+    main.addEventListener("change", () => {
+      popup.checked = main.checked;
+      onChange(main.checked);
+    });
+    popup.addEventListener("change", () => {
+      main.checked = popup.checked;
+      onChange(popup.checked);
+    });
+  }
+  
+  // Sound toggle sync (no game restart needed)
+  syncToggle(soundToggle, soundToggleP, () => {});
+  
+  // Easy toggle sync
+  syncToggle(easyToggle, easyToggleP, (checked) => {
+    setMessage(checked ? "Easy mode on! 👍" : "Easy mode off!", "");
+    speak(checked ? "Easy mode on!" : "Easy mode off!");
+    newGame();
+  });
+  
+  // Big card toggle sync
+  syncToggle(bigToggle, bigToggleP, (checked) => {
+    setMessage(checked ? "Big card mode on! 👆" : "Big card mode off!", "");
+    speak(checked ? "Big card mode on!" : "Big card mode off!");
+    newGame();
+  });
+  
+  // Voice toggle sync
+  syncToggle(voiceToggle, voiceToggleP, (checked) => {
+    setMessage(checked ? "Kid voice on! 🗣️" : "Kid voice off!", "");
+    if(checked) speak("Hello! Let's play!");
+    else if("speechSynthesis" in window) window.speechSynthesis.cancel();
+  });
+  
+  // Popup buttons
+  newGameBtnP.addEventListener("click", () => { closeAllPopups(); newGame(); });
+  resetBtnP.addEventListener("click", () => { closeAllPopups(); resetProgress(); });
+  peekBtnP.addEventListener("click", () => { closeAllPopups(); peek(easyToggle.checked ? 1400 : 900); });
+  
+  // Popup menu handling
+  function openPopup(popup){
+    closeAllPopups();
+    popup.classList.add("active");
+    popupOverlay.classList.add("active");
+  }
+  function closeAllPopups(){
+    statsPopup.classList.remove("active");
+    settingsPopup.classList.remove("active");
+    popupOverlay.classList.remove("active");
+  }
+  
+  statsBtn.addEventListener("click", () => openPopup(statsPopup));
+  settingsBtn.addEventListener("click", () => openPopup(settingsPopup));
+  popupOverlay.addEventListener("click", closeAllPopups);
+  
+  // Close buttons inside popups
+  document.querySelectorAll(".closeBtn[data-close]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const popupId = btn.getAttribute("data-close");
+      document.getElementById(popupId)?.classList.remove("active");
+      popupOverlay.classList.remove("active");
+    });
+  });
+  
+  // Close popup on Escape key
+  document.addEventListener("keydown", (e) => {
+    if(e.key === "Escape") closeAllPopups();
+  });
 
   // Keep confetti correct on resize
   window.addEventListener("resize", () => { if(confettiRAF) resizeConfettiCanvas(); });
