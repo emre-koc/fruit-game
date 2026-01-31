@@ -154,6 +154,28 @@
       -webkit-filter:drop-shadow(0 8px 14px rgba(0,0,0,.25));
       filter:drop-shadow(0 8px 14px rgba(0,0,0,.25));
     }
+    /* Legacy/low-power mode (older iOS) */
+    body.legacy .emoji{
+      -webkit-filter:none;
+      filter:none;
+    }
+    body.legacy .card,
+    body.legacy .face,
+    body.legacy .board,
+    body.legacy .panel,
+    body.legacy .pill{
+      box-shadow:none;
+    }
+    body.legacy .card,
+    body.legacy .cardInner{
+      -webkit-transition:none;
+      transition:none;
+    }
+    body.legacy .wrongFlash,
+    body.legacy .winGlow{
+      -webkit-animation:none;
+      animation:none;
+    }
     .matched .back{
       border-color:rgba(109,255,179,.45);
       box-shadow:0 0 0 2px rgba(109,255,179,.18), 0 12px 26px rgba(0,0,0,.25);
@@ -464,7 +486,7 @@
         <div class="pill"><div class="label">Matches</div><div class="value smallValue" id="matchesValueP">0/0</div></div>
         <div class="pill"><div class="label">Wins</div><div class="value" id="winsValueP">0</div></div>
       </div>
-      <div class="small" style="margin-top:8px;">
+    <div class="small" id="levelInfoP" style="margin-top:8px;">
         Level up every <b>3 wins</b>: 4×4 → 6×6 → 8×8 → 10×10
       </div>
     </div>
@@ -514,7 +536,7 @@
       </div>
 
       <div class="message" id="message"></div>
-      <div class="small">
+      <div class="small" id="levelInfo">
         Even grids only: <b>4×4 → 6×6 → 8×8 → 10×10</b> (level up every <b>3 wins</b>). ⭐ rating + confetti on win!
       </div>
     </div>
@@ -535,6 +557,22 @@
     "🍑","🍈","🍐","🍏","🥥","🍅","🍒","🍊","🍇","🍓",
     "🫐","🥝","🍍","🥭","🍎","🍐","🍉","🍌","🍋","🍊"
   ];
+
+  function getIOSMajorVersion(){
+    const ua = navigator.userAgent || "";
+    const match = ua.match(/OS (\d+)_/);
+    if (!match) return null;
+    return parseInt(match[1], 10);
+  }
+  function isLegacyIOS(){
+    const ua = navigator.userAgent || "";
+    if (!/iP(hone|ad|od)/.test(ua)) return false;
+    const major = getIOSMajorVersion();
+    return major !== null && major <= 12;
+  }
+  const legacyMode = isLegacyIOS();
+  if (legacyMode) document.body.classList.add("legacy");
+  const LEGACY_MAX_GRID = 8;
 
   // State
   let wins = 0;
@@ -604,10 +642,12 @@
   const easyToggleP = document.getElementById("easyToggleP");
   const voiceToggleP = document.getElementById("voiceToggleP");
   const bigToggleP = document.getElementById("bigToggleP");
+  const levelInfo = document.getElementById("levelInfo");
+  const levelInfoP = document.getElementById("levelInfoP");
 
   // Confetti
   const confettiCanvas = document.getElementById("confetti");
-  const ctx = confettiCanvas.getContext("2d");
+  const ctx = confettiCanvas.getContext && confettiCanvas.getContext("2d");
   let confetti = [];
   let confettiRAF = null;
 
@@ -662,7 +702,27 @@
   }
 
   // Helpers
+  const now = () => (window.performance && performance.now ? performance.now() : Date.now());
   const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+  function setGridGap(el, px){
+    const value = (typeof px === "number") ? (px + "px") : px;
+    el.style.gap = value;
+    el.style.gridGap = value;
+    el.style.rowGap = value;
+    el.style.columnGap = value;
+  }
+  function addTapListener(el, handler){
+    let lastTouch = 0;
+    el.addEventListener("touchend", (e) => {
+      lastTouch = Date.now();
+      e.preventDefault();
+      handler(e);
+    });
+    el.addEventListener("click", (e) => {
+      if (Date.now() - lastTouch < 350) return;
+      handler(e);
+    });
+  }
   function shuffle(arr){
     for(let i=arr.length-1;i>0;i--){
       const j=Math.floor(Math.random()*(i+1));
@@ -724,6 +784,18 @@
     if(winsValueP) winsValueP.textContent = wins;
   }
 
+  function applyLegacyText(){
+    if (!legacyMode) return;
+    const capText = "4×4 → 6×6 → 8×8";
+    if (levelInfo) {
+      levelInfo.innerHTML = "Even grids only: <b>" + capText + "</b> (level up every <b>3 wins</b>). ⭐ rating + confetti on win!";
+    }
+    if (levelInfoP) {
+      levelInfoP.innerHTML = "Level up every <b>3 wins</b>: " + capText;
+    }
+  }
+  applyLegacyText();
+
   function gridFromWins(w){
     // Every 3 wins: 4 -> 6 -> 8 -> 10
     const steps = Math.floor(w / 3);
@@ -733,6 +805,7 @@
   function effectiveMaxGrid(){
     // Big card mode keeps it playable on touch screens.
     // If screen is small, limit to 8x8; otherwise allow 10x10.
+    if (legacyMode) return LEGACY_MAX_GRID;
     if (!bigToggle.checked) return 10;
     const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
     return smallScreen ? 8 : 10;
@@ -754,7 +827,7 @@
     const baseGap =
       bigToggle.checked ? (n>=10 ? 7 : n>=8 ? 10 : n>=6 ? 12 : 12)
                         : (n>=10 ? 5 : n>=8 ? 7 : n>=6 ? 9 : 10);
-    board.style.gap = `${baseGap}px`;
+    setGridGap(board, baseGap);
   }
 
   // Timer controls
@@ -766,9 +839,9 @@
   function startTimer(){
     if(timerRunning) return;
     timerRunning = true;
-    startMs = performance.now() - elapsedMs;
+    startMs = now() - elapsedMs;
     timerId = setInterval(() => {
-      elapsedMs = performance.now() - startMs;
+      elapsedMs = now() - startMs;
       const timeText = formatTime(elapsedMs);
       timeValue.textContent = timeText;
       if(timeValueL) timeValueL.textContent = timeText;
@@ -798,7 +871,7 @@
       </div>
     `;
     // Click is enough for touch too; we also stop double-tap zoom issues via viewport/meta + tap highlight.
-    card.addEventListener("click", () => onCardClick(card));
+    addTapListener(card, () => onCardClick(card));
     card.addEventListener("keydown", (e)=>{
       if(e.key==="Enter" || e.key===" "){ e.preventDefault(); onCardClick(card); }
     });
@@ -838,7 +911,9 @@
     board.innerHTML = "";
     board.classList.remove("winGlow");
 
-    board.style.gridTemplateColumns = `repeat(${gridSize}, minmax(0, 1fr))`;
+    board.style.gridTemplateColumns = legacyMode
+      ? `repeat(${gridSize}, 1fr)`
+      : `repeat(${gridSize}, minmax(0, 1fr))`;
     setBoardDensity(gridSize);
 
     const icons = chooseIcons(totalPairs);
@@ -983,6 +1058,10 @@
       setTimeout(() => {
         setMessage(`🎈 Big card mode is keeping the grid at ${nextGrid}×${nextGrid} for easier tapping.`, "");
       }, 1400);
+    } else if (legacyMode && desiredNext > nextGrid) {
+      setTimeout(() => {
+        setMessage(`📱 Older iOS devices keep the grid at ${nextGrid}×${nextGrid} for smoother play.`, "");
+      }, 1400);
     }
   }
 
@@ -990,7 +1069,9 @@
   function peek(durationMs=900){
     if(busy) return;
     busy = true;
-    const cards = [...board.querySelectorAll(".card")];
+    const nodeList = board.querySelectorAll(".card");
+    const cards = [];
+    for(let i=0;i<nodeList.length;i++) cards.push(nodeList[i]);
     cards.forEach(c => flip(c,true));
     setTimeout(()=>{
       cards.forEach(c => { if(c.dataset.matched !== "true") flip(c,false); });
@@ -1016,27 +1097,35 @@
 
   // Confetti
   function resizeConfettiCanvas(){
+    if (!ctx) return;
     const r = boardWrap.getBoundingClientRect();
-    confettiCanvas.width = Math.floor(r.width * devicePixelRatio);
-    confettiCanvas.height = Math.floor(r.height * devicePixelRatio);
+    if (!r.width || !r.height) return;
+    const dpr = window.devicePixelRatio || 1;
+    confettiCanvas.width = Math.floor(r.width * dpr);
+    confettiCanvas.height = Math.floor(r.height * dpr);
     confettiCanvas.style.width = r.width + "px";
     confettiCanvas.style.height = r.height + "px";
-    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function cancelConfetti(){
+    if (!ctx) return;
     if(confettiRAF) cancelAnimationFrame(confettiRAF);
     confettiRAF = null;
     confetti = [];
     ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
   }
   function launchConfetti(durationMs=1200){
+    if (!ctx) return;
     cancelConfetti();
     resizeConfettiCanvas();
 
     const r = boardWrap.getBoundingClientRect();
     const w = r.width, h = r.height;
+    if (!w || !h) return;
 
-    const count = Math.min(240, Math.max(90, gridSize * gridSize * 1.2));
+    const count = legacyMode
+      ? Math.min(140, Math.max(60, gridSize * gridSize * 0.7))
+      : Math.min(240, Math.max(90, gridSize * gridSize * 1.2));
     confetti = [];
     for(let i=0;i<count;i++){
       confetti.push({
@@ -1054,9 +1143,10 @@
       });
     }
 
-    const endAt = performance.now() + durationMs;
+    const duration = legacyMode ? Math.min(900, durationMs) : durationMs;
+    const endAt = now() + duration;
     function tick(){
-      const now = performance.now();
+      const t = now();
       ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
 
       for(const p of confetti){
@@ -1088,7 +1178,7 @@
 
       confetti = confetti.filter(p => p.life < p.maxLife && p.y < h + 80);
 
-      if(now < endAt && confetti.length){
+      if(t < endAt && confetti.length){
         confettiRAF = requestAnimationFrame(tick);
       } else {
         cancelConfetti();
@@ -1098,9 +1188,9 @@
   }
 
   // Buttons + toggles (main panel)
-  newGameBtn.addEventListener("click", () => newGame());
-  resetBtn.addEventListener("click", () => resetProgress());
-  peekBtn.addEventListener("click", () => peek(easyToggle.checked ? 1400 : 900));
+  addTapListener(newGameBtn, () => newGame());
+  addTapListener(resetBtn, () => resetProgress());
+  addTapListener(peekBtn, () => peek(easyToggle.checked ? 1400 : 900));
 
   // Sync function for toggles
   function syncToggle(main, popup, onChange){
@@ -1139,9 +1229,9 @@
   });
   
   // Popup buttons
-  newGameBtnP.addEventListener("click", () => { closeAllPopups(); newGame(); });
-  resetBtnP.addEventListener("click", () => { closeAllPopups(); resetProgress(); });
-  peekBtnP.addEventListener("click", () => { closeAllPopups(); peek(easyToggle.checked ? 1400 : 900); });
+  addTapListener(newGameBtnP, () => { closeAllPopups(); newGame(); });
+  addTapListener(resetBtnP, () => { closeAllPopups(); resetProgress(); });
+  addTapListener(peekBtnP, () => { closeAllPopups(); peek(easyToggle.checked ? 1400 : 900); });
   
   // Popup menu handling
   function openPopup(popup){
@@ -1155,13 +1245,13 @@
     popupOverlay.classList.remove("active");
   }
   
-  statsBtn.addEventListener("click", () => openPopup(statsPopup));
-  settingsBtn.addEventListener("click", () => openPopup(settingsPopup));
-  popupOverlay.addEventListener("click", closeAllPopups);
+  addTapListener(statsBtn, () => openPopup(statsPopup));
+  addTapListener(settingsBtn, () => openPopup(settingsPopup));
+  addTapListener(popupOverlay, closeAllPopups);
   
   // Close buttons inside popups
   document.querySelectorAll(".closeBtn[data-close]").forEach(function(btn) {
-    btn.addEventListener("click", function() {
+    addTapListener(btn, function() {
       var popupId = btn.getAttribute("data-close");
       var popup = document.getElementById(popupId);
       if (popup) popup.classList.remove("active");
