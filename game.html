@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fruit Match Memory</title>
+  <style>
+    :root{
+      --bg:#0b1220; --text:#eaf2ff; --muted:rgba(234,242,255,.7);
+      --accent:#7cdbff; --good:#6dffb3; --bad:#ff6d6d; --shadow:0 12px 35px rgba(0,0,0,.35);
+    }
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+      color:var(--text);
+      background:radial-gradient(1000px 700px at 20% 10%, #15204a 0%, var(--bg) 55%, #070b15 100%);
+      min-height:100vh;
+      display:flex;
+      justify-content:center;
+    }
+    .wrap{ width:min(980px,96vw); padding:18px 10px 26px; display:grid; gap:14px; }
+    header{ display:grid; gap:10px; justify-items:center; text-align:center; }
+    h1{ font-size:clamp(20px,3.6vw,34px); margin:6px 0 0; }
+    .sub{ color:var(--muted); font-size:clamp(13px,2.2vw,16px); margin-top:-2px; }
+
+    .panel{
+      display:grid; gap:10px;
+      background:rgba(10,16,34,.55);
+      border:1px solid rgba(124,219,255,.18);
+      border-radius:18px;
+      padding:14px;
+      box-shadow:var(--shadow);
+    }
+    .stats{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .pill{
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:16px;
+      padding:10px 12px;
+      text-align:center;
+      box-shadow:0 10px 28px rgba(0,0,0,.15);
+    }
+    .pill .label{ font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+    .pill .value{ font-size:18px; font-weight:800; }
+    .pill .value.smallValue{ font-size:16px; font-weight:800; }
+
+    .controls{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; }
+    button,.toggle{
+      border:0; border-radius:14px; padding:10px 14px;
+      font-weight:800; cursor:pointer; user-select:none;
+      color:var(--text);
+      box-shadow:0 12px 26px rgba(0,0,0,.22);
+    }
+    button{
+      background:linear-gradient(180deg, rgba(124,219,255,.18), rgba(124,219,255,.08));
+      border:1px solid rgba(124,219,255,.25);
+    }
+    button:hover{ filter:brightness(1.06); }
+    button:active{ transform:translateY(1px); }
+    .toggle{
+      display:flex; align-items:center; gap:10px;
+      background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+      border:1px solid rgba(255,255,255,.14);
+      font-weight:800;
+      padding:10px 14px;
+    }
+    .toggle input{ width:18px; height:18px; accent-color:#7cdbff; }
+    .message{ text-align:center; font-size:clamp(14px,2.6vw,18px); color:var(--muted); min-height:26px; }
+    .small{ font-size:12px; color:var(--muted); text-align:center; }
+
+    .boardWrap{ display:grid; place-items:center; padding-top:6px; position:relative; }
+    .board{
+      width:min(940px,96vw);
+      display:grid; gap:10px;
+      padding:14px;
+      border-radius:22px;
+      background:rgba(8,12,26,.55);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:var(--shadow);
+      touch-action:manipulation;
+      position:relative;
+      z-index:1;
+    }
+
+    /* Big card mode gives larger, easier-to-tap cards (by limiting board width a bit and increasing gap/padding) */
+    .board.bigMode{
+      width:min(760px, 96vw);
+      padding:16px;
+      gap:12px;
+    }
+
+    .card{
+      position:relative;
+      aspect-ratio:1/1;
+      border-radius:16px;
+      transform-style:preserve-3d;
+      transition:transform 220ms ease, filter 200ms ease;
+      cursor:pointer;
+      user-select:none;
+      background:transparent;
+      border:none;
+      padding:0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .card:focus{ outline:3px solid rgba(124,219,255,.55); outline-offset:2px; }
+    .card.locked{ cursor:default; }
+    .cardInner{ position:absolute; inset:0; border-radius:16px; transform-style:preserve-3d; transition:transform 220ms ease; }
+    .card.isFlipped .cardInner{ transform:rotateY(180deg); }
+    .face{
+      position:absolute; inset:0;
+      display:grid; place-items:center;
+      border-radius:16px;
+      backface-visibility:hidden;
+      box-shadow:0 12px 26px rgba(0,0,0,.25);
+      border:1px solid rgba(255,255,255,.10);
+    }
+    .front{ background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); }
+    .back{
+      transform:rotateY(180deg);
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+    }
+    .pattern{
+      width:70%; height:70%; border-radius:14px;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(124,219,255,.25) 0 18%, transparent 19%),
+        radial-gradient(circle at 70% 60%, rgba(109,255,179,.18) 0 20%, transparent 21%),
+        radial-gradient(circle at 40% 80%, rgba(255,109,109,.16) 0 16%, transparent 17%),
+        linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,0));
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:inset 0 0 0 2px rgba(255,255,255,.05);
+    }
+    .emoji{
+      font-size:clamp(26px,5vw,48px);
+      line-height:1;
+      filter:drop-shadow(0 8px 14px rgba(0,0,0,.25));
+    }
+    .matched .back{
+      border-color:rgba(109,255,179,.45);
+      box-shadow:0 0 0 2px rgba(109,255,179,.18), 0 12px 26px rgba(0,0,0,.25);
+    }
+    .wrongFlash{ animation:wrong 280ms ease; }
+    @keyframes wrong{
+      0%{ filter:drop-shadow(0 0 0 rgba(255,109,109,0)); }
+      50%{ filter:drop-shadow(0 0 18px rgba(255,109,109,.75)); }
+      100%{ filter:drop-shadow(0 0 0 rgba(255,109,109,0)); }
+    }
+    .winGlow{ animation:glow 700ms ease-in-out 2; }
+    @keyframes glow{
+      0%{ box-shadow:var(--shadow); }
+      50%{ box-shadow:0 0 40px rgba(124,219,255,.25), 0 0 70px rgba(109,255,179,.12), var(--shadow); }
+      100%{ box-shadow:var(--shadow); }
+    }
+
+    #confetti{
+      position:absolute; inset:0; z-index:2; pointer-events:none;
+    }
+
+    @media (max-width: 520px){
+      .stats{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .board{ gap:8px; padding:12px; }
+      .board.bigMode{ gap:10px; padding:14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🍓 Fruit Match Memory</h1>
+      <div class="sub">Flip two cards. If they match, they stay open. Match all to win!</div>
+    </header>
+
+    <div class="panel">
+      <div class="stats">
+        <div class="pill"><div class="label">Grid</div><div class="value" id="gridValue">4×4</div></div>
+        <div class="pill"><div class="label">Time</div><div class="value" id="timeValue">0:00</div></div>
+        <div class="pill"><div class="label">Moves</div><div class="value" id="movesValue">0</div></div>
+        <div class="pill"><div class="label">Matches</div><div class="value smallValue" id="matchesValue">0/0</div></div>
+        <div class="pill"><div class="label">Wins</div><div class="value" id="winsValue">0</div></div>
+      </div>
+
+      <div class="controls">
+        <button id="newGameBtn">New Game</button>
+        <button id="peekBtn" title="Peek at all cards for a moment">Peek 👀</button>
+        <button id="resetBtn">Reset Progress</button>
+
+        <label class="toggle" title="Sound beeps on/off"><input id="soundToggle" type="checkbox" checked />Sound</label>
+        <label class="toggle" title="Easy mode: longer peek + optional peek after mistakes"><input id="easyToggle" type="checkbox" />Easy mode</label>
+        <label class="toggle" title="Kid voice: says short phrases"><input id="voiceToggle" type="checkbox" />Kid voice</label>
+        <label class="toggle" title="Big cards: easier taps (limits grid on small screens)"><input id="bigToggle" type="checkbox" />Big card mode</label>
+      </div>
+
+      <div class="message" id="message"></div>
+      <div class="small">
+        Even grids only: <b>4×4 → 6×6 → 8×8 → 10×10</b> (level up every <b>3 wins</b>). ⭐ rating + confetti on win!
+      </div>
+    </div>
+
+    <div class="boardWrap" id="boardWrap">
+      <canvas id="confetti"></canvas>
+      <div class="board" id="board" aria-label="Memory board"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Fruit emoji icons
+  const FRUITS = [
+    "🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍒",
+    "🥝","🍍","🥭","🍑","🍈","🍏","🍅","🥥","🍒","🍊",
+    "🍓","🍇","🍉","🍎","🥝","🍍","🥭","🫐","🍋","🍌",
+    "🍑","🍈","🍐","🍏","🥥","🍅","🍒","🍊","🍇","🍓",
+    "🫐","🥝","🍍","🥭","🍎","🍐","🍉","🍌","🍋","🍊"
+  ];
+
+  // State
+  let wins = 0;
+  let gridSize = 4;
+  let moves = 0;
+  let matches = 0;
+  let totalPairs = 0;
+
+  let firstPick = null;
+  let secondPick = null;
+  let busy = false;
+  let wonThisRound = false;
+
+  // Timer
+  let timerId = null;
+  let startMs = 0;
+  let elapsedMs = 0;
+  let timerRunning = false;
+
+  // DOM
+  const board = document.getElementById("board");
+  const boardWrap = document.getElementById("boardWrap");
+
+  const gridValue = document.getElementById("gridValue");
+  const timeValue = document.getElementById("timeValue");
+  const movesValue = document.getElementById("movesValue");
+  const matchesValue = document.getElementById("matchesValue");
+  const winsValue = document.getElementById("winsValue");
+  const message = document.getElementById("message");
+
+  const newGameBtn = document.getElementById("newGameBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const peekBtn = document.getElementById("peekBtn");
+
+  const soundToggle = document.getElementById("soundToggle");
+  const easyToggle  = document.getElementById("easyToggle");
+  const voiceToggle = document.getElementById("voiceToggle");
+  const bigToggle   = document.getElementById("bigToggle");
+
+  // Confetti
+  const confettiCanvas = document.getElementById("confetti");
+  const ctx = confettiCanvas.getContext("2d");
+  let confetti = [];
+  let confettiRAF = null;
+
+  // --- Sound beeps (WebAudio)
+  let audioCtx = null;
+  function beep(freq=440, dur=0.08, type="sine", gain=0.04) {
+    if (!soundToggle.checked) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = gain;
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start();
+      o.stop(audioCtx.currentTime + dur);
+    } catch {}
+  }
+  const soundFlip  = () => beep(520, 0.05, "sine", 0.03);
+  const soundMatch = () => { beep(740,0.07,"triangle",0.05); beep(980,0.08,"triangle",0.05); };
+  const soundWrong = () => beep(200, 0.12, "sawtooth", 0.03);
+  const soundWin   = () => { beep(660,0.09,"triangle",0.06); setTimeout(()=>beep(880,0.1,"triangle",0.06),90); setTimeout(()=>beep(1100,0.12,"triangle",0.06),180); };
+
+  // --- Kid voice (speechSynthesis)
+  function speak(text) {
+    if (!voiceToggle.checked) return;
+    if (!("speechSynthesis" in window)) return;
+    try {
+      // Stop overlapping chatter
+      window.speechSynthesis.cancel();
+
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0;   // kid-friendly pace
+      u.pitch = 1.2;  // a bit brighter
+      u.volume = 1.0;
+
+      // Try to pick an English voice if available
+      const voices = window.speechSynthesis.getVoices?.() || [];
+      const en = voices.find(v => /en/i.test(v.lang)) || voices[0];
+      if (en) u.voice = en;
+
+      window.speechSynthesis.speak(u);
+    } catch {}
+  }
+
+  // Some browsers load voices async
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.onvoiceschanged = () => {};
+  }
+
+  // Helpers
+  const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+  function chooseIcons(pairCount){
+    const pool = FRUITS.slice();
+    shuffle(pool);
+    if(pairCount <= pool.length) return pool.slice(0, pairCount);
+    const out=[];
+    for(let i=0;i<pairCount;i++) out.push(pool[i % pool.length]);
+    return out;
+  }
+  function formatTime(ms){
+    const totalSec = Math.floor(ms/1000);
+    const m = Math.floor(totalSec/60);
+    const s = totalSec%60;
+    return `${m}:${String(s).padStart(2,"0")}`;
+  }
+  function setMessage(text, tone=""){
+    message.textContent = text;
+    message.style.color =
+      tone==="good" ? "rgba(109,255,179,.95)" :
+      tone==="bad"  ? "rgba(255,109,109,.95)" :
+                      "rgba(234,242,255,0.7)";
+  }
+  function updateStats(){
+    gridValue.textContent = `${gridSize}×${gridSize}`;
+    movesValue.textContent = moves;
+    matchesValue.textContent = `${matches}/${totalPairs}`;
+    winsValue.textContent = wins;
+    timeValue.textContent = formatTime(elapsedMs);
+  }
+
+  function gridFromWins(w){
+    // Every 3 wins: 4 -> 6 -> 8 -> 10
+    const steps = Math.floor(w / 3);
+    return clamp(4 + steps * 2, 4, 10);
+  }
+
+  function effectiveMaxGrid(){
+    // Big card mode keeps it playable on touch screens.
+    // If screen is small, limit to 8x8; otherwise allow 10x10.
+    if (!bigToggle.checked) return 10;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
+    return smallScreen ? 8 : 10;
+  }
+
+  function computeGridForThisRound(){
+    const desired = gridFromWins(wins);
+    return Math.min(desired, effectiveMaxGrid());
+  }
+
+  function setBoardDensity(n){
+    // slightly larger gaps in big mode for tap comfort
+    if (bigToggle.checked) {
+      board.classList.add("bigMode");
+    } else {
+      board.classList.remove("bigMode");
+    }
+
+    const baseGap =
+      bigToggle.checked ? (n>=10 ? 7 : n>=8 ? 10 : n>=6 ? 12 : 12)
+                        : (n>=10 ? 5 : n>=8 ? 7 : n>=6 ? 9 : 10);
+    board.style.gap = `${baseGap}px`;
+  }
+
+  // Timer controls
+  function stopTimer(){
+    timerRunning = false;
+    if(timerId) clearInterval(timerId);
+    timerId = null;
+  }
+  function startTimer(){
+    if(timerRunning) return;
+    timerRunning = true;
+    startMs = performance.now() - elapsedMs;
+    timerId = setInterval(() => {
+      elapsedMs = performance.now() - startMs;
+      timeValue.textContent = formatTime(elapsedMs);
+    }, 200);
+  }
+  function resetTimer(){
+    stopTimer();
+    elapsedMs = 0;
+    timeValue.textContent = "0:00";
+  }
+
+  // Cards
+  function createCard(icon){
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+    card.setAttribute("aria-label", "Memory card");
+    card.dataset.icon = icon;
+    card.dataset.matched = "false";
+    card.dataset.locked = "false";
+
+    card.innerHTML = `
+      <div class="cardInner">
+        <div class="face front"><div class="pattern"></div></div>
+        <div class="face back"><div class="emoji">${icon}</div></div>
+      </div>
+    `;
+    // Click is enough for touch too; we also stop double-tap zoom issues via viewport/meta + tap highlight.
+    card.addEventListener("click", () => onCardClick(card));
+    card.addEventListener("keydown", (e)=>{
+      if(e.key==="Enter" || e.key===" "){ e.preventDefault(); onCardClick(card); }
+    });
+    return card;
+  }
+
+  function flip(card, on){
+    if(on) card.classList.add("isFlipped");
+    else card.classList.remove("isFlipped");
+  }
+
+  // Easy mode behavior
+  function easyStartPeekMs(){
+    return easyToggle.checked ? 1400 : 650;
+  }
+  function easyAfterWrongPeekMs(){
+    // When easy mode is on, after a wrong match, briefly reveal all cards again.
+    return easyToggle.checked ? 650 : 0;
+  }
+
+  // Game build
+  function newGame(){
+    wonThisRound = false;
+    gridSize = computeGridForThisRound();
+
+    const totalCards = gridSize * gridSize;
+    totalPairs = totalCards / 2;
+
+    moves = 0;
+    matches = 0;
+    firstPick = null;
+    secondPick = null;
+    busy = false;
+
+    resetTimer();
+
+    board.innerHTML = "";
+    board.classList.remove("winGlow");
+
+    board.style.gridTemplateColumns = `repeat(${gridSize}, minmax(0, 1fr))`;
+    setBoardDensity(gridSize);
+
+    const icons = chooseIcons(totalPairs);
+    const deck = [];
+    icons.forEach(icon => deck.push(icon, icon));
+    shuffle(deck);
+
+    for(const icon of deck){
+      board.appendChild(createCard(icon));
+    }
+
+    setMessage(`New game! Match all the fruits!`);
+    speak("New game! Let's match the fruits!");
+    updateStats();
+
+    peek(easyStartPeekMs());
+  }
+
+  function onCardClick(card){
+    if (busy || wonThisRound) return;
+    if (card.dataset.locked === "true") return;
+    if (card.dataset.matched === "true") return;
+    if (card === firstPick) return;
+
+    startTimer();
+    flip(card, true);
+    soundFlip();
+
+    if(!firstPick){
+      firstPick = card;
+      return;
+    }
+
+    secondPick = card;
+    moves += 1;
+    updateStats();
+
+    const a = firstPick.dataset.icon;
+    const b = secondPick.dataset.icon;
+
+    if(a === b){
+      firstPick.dataset.matched = "true";
+      secondPick.dataset.matched = "true";
+      firstPick.classList.add("matched","locked");
+      secondPick.classList.add("matched","locked");
+
+      matches += 1;
+      updateStats();
+      soundMatch();
+      const msg = randomHappy();
+      setMessage(msg, "good");
+      speak("Yay! A match!");
+
+      firstPick = null;
+      secondPick = null;
+
+      if(matches === totalPairs){
+        handleWin();
+      }
+    } else {
+      busy = true;
+      soundWrong();
+      firstPick.classList.add("wrongFlash");
+      secondPick.classList.add("wrongFlash");
+      const msg = randomTryAgain();
+      setMessage(msg, "bad");
+      speak("Oops! Try again!");
+
+      setTimeout(()=>{
+        flip(firstPick,false);
+        flip(secondPick,false);
+        firstPick.classList.remove("wrongFlash");
+        secondPick.classList.remove("wrongFlash");
+        firstPick=null; secondPick=null;
+
+        // Easy mode: quick “help peek” after mistakes
+        const helpMs = easyAfterWrongPeekMs();
+        if (helpMs > 0) {
+          peek(helpMs);
+        }
+        busy=false;
+      }, 650);
+    }
+  }
+
+  // Stars
+  function computeStars(grid, moves, elapsedMs){
+    const pairs = (grid*grid)/2;
+    const seconds = Math.max(1, Math.floor(elapsedMs/1000));
+
+    // Easy mode makes rating a bit more forgiving (kids are learning)
+    const easyBonus = easyToggle.checked ? 0.15 : 0;
+
+    const movePerfect = pairs + Math.round(pairs*(0.25 + easyBonus));
+    const moveOkay    = pairs + Math.round(pairs*(0.75 + easyBonus));
+
+    const timePerfect = Math.round(pairs*(3 + easyBonus*3));
+    const timeOkay    = Math.round(pairs*(6 + easyBonus*5));
+
+    let stars = 1;
+    const greatMoves = moves <= movePerfect;
+    const goodMoves  = moves <= moveOkay;
+    const greatTime  = seconds <= timePerfect;
+    const goodTime   = seconds <= timeOkay;
+
+    if (goodMoves && goodTime) stars = 2;
+    if (greatMoves && greatTime) stars = 3;
+    return stars;
+  }
+  const starsText = n => "⭐".repeat(n) + "☆".repeat(3-n);
+
+  function handleWin(){
+    wonThisRound = true;
+    stopTimer();
+    soundWin();
+    board.classList.add("winGlow");
+
+    const stars = computeStars(gridSize, moves, elapsedMs);
+    const starLine = `${starsText(stars)} (${formatTime(elapsedMs)}, ${moves} moves)`;
+
+    wins += 1;
+    updateStats();
+
+    launchConfetti(1600);
+
+    // Level info (even grids only)
+    const desiredNext = gridFromWins(wins);
+    const nextGrid = Math.min(desiredNext, effectiveMaxGrid());
+    const leveledUp = nextGrid !== gridSize;
+
+    if (leveledUp){
+      setMessage(`🎉 You won! ${starLine}  Level up! Next: ${nextGrid}×${nextGrid}`, "good");
+      speak("You won! Level up!");
+    } else {
+      const remaining = 3 - (wins % 3);
+      setMessage(`🎉 You won! ${starLine}  ${remaining} more win${remaining===1?"":"s"} to level up!`, "good");
+      speak("You won! Great job!");
+    }
+
+    // If big mode capped the grid, hint gently
+    if (bigToggle.checked && desiredNext > nextGrid) {
+      setTimeout(() => {
+        setMessage(`🎈 Big card mode is keeping the grid at ${nextGrid}×${nextGrid} for easier tapping.`, "");
+      }, 1400);
+    }
+  }
+
+  // Peek helper
+  function peek(durationMs=900){
+    if(busy) return;
+    busy = true;
+    const cards = [...board.querySelectorAll(".card")];
+    cards.forEach(c => flip(c,true));
+    setTimeout(()=>{
+      cards.forEach(c => { if(c.dataset.matched !== "true") flip(c,false); });
+      busy = false;
+    }, durationMs);
+  }
+
+  function resetProgress(){
+    wins = 0;
+    setMessage("Progress reset. Back to 4×4!", "");
+    speak("Reset! Back to the easy level.");
+    newGame();
+  }
+
+  function randomHappy(){
+    const msgs=["Nice match! 🌟","Yay! You found a pair! 🍓","Great job! 🎈","Awesome! 🚀","Perfect match! 🎉"];
+    return msgs[Math.floor(Math.random()*msgs.length)];
+  }
+  function randomTryAgain(){
+    const msgs=["Oops! Try again 🙂","Not the same… you can do it! 💪","Close! Flip two more! 🧠","Keep trying! ⭐","Almost! 🌈"];
+    return msgs[Math.floor(Math.random()*msgs.length)];
+  }
+
+  // Confetti
+  function resizeConfettiCanvas(){
+    const r = boardWrap.getBoundingClientRect();
+    confettiCanvas.width = Math.floor(r.width * devicePixelRatio);
+    confettiCanvas.height = Math.floor(r.height * devicePixelRatio);
+    confettiCanvas.style.width = r.width + "px";
+    confettiCanvas.style.height = r.height + "px";
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  }
+  function cancelConfetti(){
+    if(confettiRAF) cancelAnimationFrame(confettiRAF);
+    confettiRAF = null;
+    confetti = [];
+    ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+  }
+  function launchConfetti(durationMs=1200){
+    cancelConfetti();
+    resizeConfettiCanvas();
+
+    const r = boardWrap.getBoundingClientRect();
+    const w = r.width, h = r.height;
+
+    const count = Math.min(240, Math.max(90, gridSize * gridSize * 1.2));
+    confetti = [];
+    for(let i=0;i<count;i++){
+      confetti.push({
+        x: w * (0.2 + Math.random()*0.6),
+        y: -10 - Math.random()*h*0.2,
+        vx: (Math.random()*2 - 1) * (1.2 + Math.random()*1.5),
+        vy: (2.2 + Math.random()*3.2),
+        rot: Math.random()*Math.PI*2,
+        vr: (Math.random()*0.2 - 0.1),
+        size: 6 + Math.random()*8,
+        life: 0,
+        maxLife: 60 + Math.random()*55,
+        hue: Math.floor(Math.random()*360),
+        shape: Math.random() < 0.25 ? "circle" : "rect"
+      });
+    }
+
+    const endAt = performance.now() + durationMs;
+    function tick(){
+      const now = performance.now();
+      ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+
+      for(const p of confetti){
+        p.life++;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.03;
+        p.vx *= 0.995;
+        p.rot += p.vr;
+
+        const alpha = 1 - (p.life / p.maxLife);
+        if(alpha <= 0) continue;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = `hsl(${p.hue} 90% 60%)`;
+
+        if(p.shape === "circle"){
+          ctx.beginPath();
+          ctx.arc(0,0,p.size*0.45,0,Math.PI*2);
+          ctx.fill();
+        } else {
+          ctx.fillRect(-p.size/2, -p.size/3, p.size, p.size*0.66);
+        }
+        ctx.restore();
+      }
+
+      confetti = confetti.filter(p => p.life < p.maxLife && p.y < h + 80);
+
+      if(now < endAt && confetti.length){
+        confettiRAF = requestAnimationFrame(tick);
+      } else {
+        cancelConfetti();
+      }
+    }
+    confettiRAF = requestAnimationFrame(tick);
+  }
+
+  // Buttons + toggles
+  newGameBtn.addEventListener("click", () => newGame());
+  resetBtn.addEventListener("click", () => resetProgress());
+  peekBtn.addEventListener("click", () => peek(easyToggle.checked ? 1400 : 900));
+
+  // When toggles change, restart to apply cleanly
+  easyToggle.addEventListener("change", () => { setMessage(easyToggle.checked ? "Easy mode on! 👍" : "Easy mode off!", ""); speak(easyToggle.checked ? "Easy mode on!" : "Easy mode off!"); newGame(); });
+  bigToggle.addEventListener("change",  () => { setMessage(bigToggle.checked ? "Big card mode on! 👆" : "Big card mode off!", ""); speak(bigToggle.checked ? "Big card mode on!" : "Big card mode off!"); newGame(); });
+  voiceToggle.addEventListener("change", () => { setMessage(voiceToggle.checked ? "Kid voice on! 🗣️" : "Kid voice off!", ""); if (voiceToggle.checked) speak("Hello! Let's play!"); else if ("speechSynthesis" in window) window.speechSynthesis.cancel(); });
+
+  // Keep confetti correct on resize
+  window.addEventListener("resize", () => { if(confettiRAF) resizeConfettiCanvas(); });
+
+  // Start
+  newGame();
+})();
+</script>
+</body>
+</html>
