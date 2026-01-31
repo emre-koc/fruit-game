@@ -403,17 +403,18 @@
       }
       
       .board{
-        width:auto;
+        width:calc(100vh - 90px);
         height:calc(100vh - 90px);
         max-height:90vw;
-        max-width:calc(100vh - 90px);
+        max-width:90vw;
         padding:12px;
         grid-gap:8px;
       }
       .board.bigMode{
+        width:calc(100vh - 90px);
         height:calc(100vh - 90px);
         max-height:85vw;
-        max-width:calc(100vh - 90px);
+        max-width:85vw;
         padding:14px;
         grid-gap:10px;
       }
@@ -436,16 +437,18 @@
     /* Extra wide landscape (iPad Pro, etc) */
     @media (min-width: 1000px) and (max-height: 850px) and (orientation: landscape) {
       .board{
+        width:calc(100vh - 80px);
         height:calc(100vh - 80px);
         max-height:70vw;
-        max-width:calc(100vh - 80px);
+        max-width:70vw;
         grid-gap:10px;
         padding:14px;
       }
       .board.bigMode{
+        width:calc(100vh - 80px);
         height:calc(100vh - 80px);
         max-height:65vw;
-        max-width:calc(100vh - 80px);
+        max-width:65vw;
       }
       .emoji{ font-size:32px; font-size:calc(24px + 2.5vh); }
     }
