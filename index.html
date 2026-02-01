@@ -125,7 +125,13 @@
     .card.isFlipped .cardInner{ -webkit-transform:rotateY(180deg); transform:rotateY(180deg); }
     .face{
       position:absolute; top:0; right:0; bottom:0; left:0;
-      display:grid; place-items:center;
+      display:-webkit-flex;
+      display:flex;
+      -webkit-align-items:center;
+      align-items:center;
+      -webkit-justify-content:center;
+      justify-content:center;
+      text-align:center;
       border-radius:16px;
       -webkit-backface-visibility:hidden;
       backface-visibility:hidden;
@@ -295,6 +301,7 @@
       z-index:150;
     }
     .popupOverlay.active{ display:block; }
+    .popupOverlay.win{ background:rgba(0,0,0,.35); }
     
     /* Stats popup specific */
     #statsPopup .stats{
@@ -302,6 +309,32 @@
       grid-gap:8px;
     }
     #statsPopup .pill{ padding:8px 10px; }
+
+    /* Win popup */
+    #winPopup{
+      top:50%;
+      left:50%;
+      width:90vw;
+      max-width:360px;
+      text-align:center;
+      -webkit-transform:translate(-50%, -50%);
+      transform:translate(-50%, -50%);
+      -webkit-animation:winPopupIn 0.25s ease;
+      animation:winPopupIn 0.25s ease;
+    }
+    #winPopup .popupHeader{ -webkit-justify-content:center; justify-content:center; }
+    #winPopup .popupContent{ text-align:center; }
+    #winPopup .winSummary{ font-size:16px; font-weight:700; }
+    #winPopup .winNext{ font-size:14px; color:var(--muted); }
+    #winPopup button{ width:100%; }
+    @-webkit-keyframes winPopupIn{
+      from{ opacity:0; -webkit-transform:translate(-50%, -50%) scale(0.9); }
+      to{ opacity:1; -webkit-transform:translate(-50%, -50%) scale(1); }
+    }
+    @keyframes winPopupIn{
+      from{ opacity:0; transform:translate(-50%, -50%) scale(0.9); }
+      to{ opacity:1; transform:translate(-50%, -50%) scale(1); }
+    }
     
     /* Landscape header bar */
     .landscapeHeader{
@@ -512,6 +545,18 @@
     </div>
   </div>
 
+  <!-- Win Popup -->
+  <div class="popup" id="winPopup" role="dialog" aria-live="polite" aria-modal="true">
+    <div class="popupHeader">
+      <h2 class="popupTitle" id="winTitle">🎉 You won!</h2>
+    </div>
+    <div class="popupContent">
+      <div class="winSummary" id="winSummary"></div>
+      <div class="winNext small" id="winNext"></div>
+      <button id="continueBtn">➡️ Continue</button>
+    </div>
+  </div>
+
   <div class="wrap">
     <header>
       <h1>🍓 Fruit Match Memory</h1>
@@ -552,13 +597,15 @@
 
 <script>
 (() => {
-  // Fruit emoji icons
-  const FRUITS = [
-    "🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍒",
-    "🥝","🍍","🥭","🍑","🍈","🍏","🍅","🥥","🍒","🍊",
-    "🍓","🍇","🍉","🍎","🥝","🍍","🥭","🫐","🍋","🍌",
-    "🍑","🍈","🍐","🍏","🥥","🍅","🍒","🍊","🍇","🍓",
-    "🫐","🥝","🍍","🥭","🍎","🍐","🍉","🍌","🍋","🍊"
+  // Emoji icons (unique per round)
+  const ICONS = [
+    "🍎","🍏","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🍒",
+    "🍑","🍍","🥝","🍈","🍅","🥥","🥭","🥑","🥕","🌽",
+    "🥔","🍠","🍞","🥐","🥖","🥨","🥯","🧀","🥚","🍳",
+    "🥞","🍔","🍟","🍕","🌭","🥪","🍗","🍖","🍪","🍩",
+    "🍫","🍬","🍭","🍦","🍨","🍧","🍮","🎂","🍰","🍿",
+    "🍯","🍡","🍢","🍙","🍚","🍛","🍜","🍣","🍤","🥠",
+    "🥧","🧁","🥛","🧃","🍹","🥤"
   ];
 
   function getIOSMajorVersion(){
@@ -629,6 +676,7 @@
   const popupOverlay = document.getElementById("popupOverlay");
   const statsPopup = document.getElementById("statsPopup");
   const settingsPopup = document.getElementById("settingsPopup");
+  const winPopup = document.getElementById("winPopup");
   
   // DOM - Popup stats
   const gridValueP = document.getElementById("gridValueP");
@@ -647,6 +695,9 @@
   const bigToggleP = document.getElementById("bigToggleP");
   const levelInfo = document.getElementById("levelInfo");
   const levelInfoP = document.getElementById("levelInfoP");
+  const winSummary = document.getElementById("winSummary");
+  const winNext = document.getElementById("winNext");
+  const continueBtn = document.getElementById("continueBtn");
 
   // Confetti
   const confettiCanvas = document.getElementById("confetti");
@@ -734,12 +785,9 @@
     return arr;
   }
   function chooseIcons(pairCount){
-    const pool = FRUITS.slice();
+    const pool = ICONS.slice();
     shuffle(pool);
-    if(pairCount <= pool.length) return pool.slice(0, pairCount);
-    const out=[];
-    for(let i=0;i<pairCount;i++) out.push(pool[i % pool.length]);
-    return out;
+    return pool.slice(0, pairCount);
   }
   function formatTime(ms){
     const totalSec = Math.floor(ms/1000);
@@ -898,6 +946,7 @@
   // Game build
   function newGame(){
     wonThisRound = false;
+    cancelConfetti();
     gridSize = computeGridForThisRound();
 
     const totalCards = gridSize * gridSize;
@@ -928,8 +977,8 @@
       board.appendChild(createCard(icon));
     }
 
-    setMessage(`New game! Match all the fruits!`);
-    speak("New game! Let's match the fruits!");
+    setMessage("New game! Match all the cards!");
+    speak("New game! Let's match the cards!");
     updateStats();
 
     peek(easyStartPeekMs());
@@ -1040,21 +1089,26 @@
     wins += 1;
     updateStats();
 
-    launchConfetti(1600);
+    launchConfetti(2400);
 
     // Level info (even grids only)
     const desiredNext = gridFromWins(wins);
     const nextGrid = Math.min(desiredNext, effectiveMaxGrid());
     const leveledUp = nextGrid !== gridSize;
 
+    const remainingWins = 3 - (wins % 3);
     if (leveledUp){
       setMessage(`🎉 You won! ${starLine}  Level up! Next: ${nextGrid}×${nextGrid}`, "good");
       speak("You won! Level up!");
     } else {
-      const remaining = 3 - (wins % 3);
-      setMessage(`🎉 You won! ${starLine}  ${remaining} more win${remaining===1?"":"s"} to level up!`, "good");
+      setMessage(`🎉 You won! ${starLine}  ${remainingWins} more win${remainingWins===1?"":"s"} to level up!`, "good");
       speak("You won! Great job!");
     }
+
+    const popupNext = leveledUp
+      ? `Next grid: ${nextGrid}×${nextGrid}`
+      : `${remainingWins} more win${remainingWins===1?"":"s"} to level up`;
+    openWinPopup(starLine, popupNext);
 
     // If big mode capped the grid, hint gently
     if (bigToggle.checked && desiredNext > nextGrid) {
@@ -1066,6 +1120,19 @@
         setMessage(`📱 Older iOS devices keep the grid at ${nextGrid}×${nextGrid} for smoother play.`, "");
       }, 1400);
     }
+  }
+
+  function openWinPopup(summaryText, nextText){
+    if (!winPopup) return;
+    if (winSummary) winSummary.textContent = summaryText;
+    if (winNext) winNext.textContent = nextText;
+    openPopup(winPopup, { overlayClass: "win" });
+  }
+
+  function continueToNextRound(){
+    cancelConfetti();
+    closeAllPopups();
+    newGame();
   }
 
   // Peek helper
@@ -1117,7 +1184,7 @@
     confetti = [];
     ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
   }
-  function launchConfetti(durationMs=1200){
+  function launchConfetti(durationMs=1800){
     if (!ctx) return;
     cancelConfetti();
     resizeConfettiCanvas();
@@ -1146,7 +1213,7 @@
       });
     }
 
-    const duration = legacyMode ? Math.min(900, durationMs) : durationMs;
+    const duration = legacyMode ? Math.min(1600, durationMs) : durationMs;
     const endAt = now() + duration;
     function tick(){
       const t = now();
@@ -1235,22 +1302,33 @@
   addTapListener(newGameBtnP, () => { closeAllPopups(); newGame(); });
   addTapListener(resetBtnP, () => { closeAllPopups(); resetProgress(); });
   addTapListener(peekBtnP, () => { closeAllPopups(); peek(easyToggle.checked ? 1400 : 900); });
+  if (continueBtn) addTapListener(continueBtn, () => continueToNextRound());
   
   // Popup menu handling
-  function openPopup(popup){
+  function openPopup(popup, options = {}){
+    const overlayClass = options.overlayClass || "";
     closeAllPopups();
     popup.classList.add("active");
     popupOverlay.classList.add("active");
+    popupOverlay.classList.toggle("win", overlayClass === "win");
   }
   function closeAllPopups(){
     statsPopup.classList.remove("active");
     settingsPopup.classList.remove("active");
+    if (winPopup) winPopup.classList.remove("active");
     popupOverlay.classList.remove("active");
+    popupOverlay.classList.remove("win");
   }
   
   addTapListener(statsBtn, () => openPopup(statsPopup));
   addTapListener(settingsBtn, () => openPopup(settingsPopup));
-  addTapListener(popupOverlay, closeAllPopups);
+  addTapListener(popupOverlay, () => {
+    if (winPopup && winPopup.classList.contains("active")) {
+      continueToNextRound();
+      return;
+    }
+    closeAllPopups();
+  });
   
   // Close buttons inside popups
   document.querySelectorAll(".closeBtn[data-close]").forEach(function(btn) {
@@ -1264,7 +1342,12 @@
   
   // Close popup on Escape key
   document.addEventListener("keydown", (e) => {
-    if(e.key === "Escape") closeAllPopups();
+    if(e.key !== "Escape") return;
+    if (winPopup && winPopup.classList.contains("active")) {
+      continueToNextRound();
+      return;
+    }
+    closeAllPopups();
   });
 
   // Keep confetti correct on resize
